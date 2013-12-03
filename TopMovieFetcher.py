@@ -10,16 +10,16 @@ class TopMovieFetcher(Hook):
     __name__ = "TopMovieFetcher"
     __version__ = "0.1"
     __description__ = "Checks HD-AREA.org for new Movies. "
-    __config__ = [("activated", "bool", "Activated", "False"),
-                  ("interval", "int", "Check interval in minutes", "60"),
-                  ("queue", "bool", "move Movies directly to Queue", "False"),
-                  ("quality", "str", "720p or 1080p", "720p"),
-                  ("rating","float","min. IMDB rating","6.1"),
-				  ("rssapple","bool","Use Apple's Top Movies RSS","True"),
-				  ("rssrottentomato","bool","Use Rottentomatoes Top Movies RSS","True"),
-				  ("usehdarea","bool","Search on hd-area.org","True"),
-				  ("usehdworld","bool","Search on hd-world.org","True"),
-				  ("tmdbapikey","str","themoviedb.org API-Key","")]
+    __config__ = [	("activated", "bool", "Activated", "False"),
+					("interval", "int", "Check interval in minutes", "60"),
+					("queue", "bool", "move Movies directly to Queue", "False"),
+					("quality", "str", "720p or 1080p", "720p"),
+					("rating","float","min. IMDB rating","6.1"),
+					("rssapple","bool","Use Apple's Top Movies RSS","True"),
+					("rssrottentomato","bool","Use Rottentomatoes Top Movies RSS","True"),
+					("usehdarea","bool","Search on hd-area.org","True"),
+					("usehdworld","bool","Search on hd-world.org","True"),
+					("tmdbapikey","str","themoviedb.org API-Key","")]
     __author_name__ = ("Studententyp")
     __author_mail__ = ("")
 
