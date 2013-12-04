@@ -24,4 +24,7 @@ Requires (add to your /usr/share/pyload/module/lib folder)
 - http://www.python-requests.org/en/latest/user/install/#install
 
 
+Credits:
+Gutz-Pilz
+
 
