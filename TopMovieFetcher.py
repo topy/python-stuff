@@ -3,7 +3,7 @@ from module.plugins.Hook import Hook
 import urllib2
 from BeautifulSoup import BeautifulSoup
 import re
-from tmdbsimple import TMDB
+import tmdb
 import feedparser
 
 class TopMovieFetcher(Hook):
@@ -19,7 +19,8 @@ class TopMovieFetcher(Hook):
 					("rssrottentomato","bool","Use Rottentomatoes Top Movies RSS","True"),
 					("usehdarea","bool","Search on hd-area.org","True"),
 					("usehdworld","bool","Search on hd-world.org","True"),
-					("tmdbapikey","str","themoviedb.org API-Key","")]
+					("tmdbapikey","str","themoviedb.org API-Key",""),
+					("tmdblang","str","Language en or de","de")]
     __author_name__ = ("Studententyp")
     __author_mail__ = ("")
 
@@ -27,7 +28,8 @@ class TopMovieFetcher(Hook):
         self.interval = self.getConfig("interval") * 60 
     def periodical(self):
 		self.core.log.debug('Period of TopMovieFetcher')
-		movieList = [];
+		movieList = []
+		movieListTrans = []
 		
 		#get feeds
 		
@@ -35,7 +37,7 @@ class TopMovieFetcher(Hook):
 		if self.getConfig('rssapple'):
 			feed = feedparser.parse('http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topMovies/xml')
 			for item in feed.entries:
-				movieList.append(item.title);
+				movieList.append(item.title[0:item.title.find('-')])
 		#rottentomatoes feed
 		if self.getConfig('rssrottentomato'):
 			feed = feedparser.parse('http://www.rottentomatoes.com/syndication/rss/top_movies.xml')
@@ -47,10 +49,40 @@ class TopMovieFetcher(Hook):
 		if self.getConfig('tmdbapikey') == "":
 			self.core.log.error('No TMDB API Key given!')
 		else:
-			self.core.log.debug('try search')
-			tmdb = TMDB(self.getConfig('tmdbapikey'))
-			search = tmdb.Search()
+			
+			tmdb.configure(self.getConfig('tmdbapikey'),self.getConfig('tmdblang'))
 			for title in movieList:
-				search.movie({'query': title})
-				for r in search.results:
-					self.core.log.debug(r['title'])
+				title = title.strip()
+				newtitle = re.sub("\(\d{4}\)$",'',title)
+				if newtitle != '':
+					title = newtitle
+				
+				self.core.log.debug('----------------------- try search ----> "' + title + '"')
+				movies = tmdb.Movies(title)
+				
+				#handling more results maybe later
+				for movie in movies.iter_results():
+					self.core.log.debug(movie['title'])
+					movieListTrans.append(movie['title'])
+					# maybe more later
+					break
+					
+		movieList = [] 
+		
+		#search on hd-area
+		if self.getConfig('usehdarea'):
+			for title in movieListTrans:
+				# prepare title
+				title = title.lower()
+				title = title.replace('ä','ae')
+				title = title.replace('ü','ue')
+				title = title.replace('ö','oe')
+				
+				searchLink = 'http://www.hd-area.org/?s=search&q='+title
+				page = urllib2.urlopen(searchLink).read()
+				soup = BeautifulSoup(page)
+				for searchDiv in soup.findAll("div", {"class" : "whitecontent"}):
+					for mLink in searchDiv.findAll("a"):
+						if self.getConfig('quality') in mLink.get('text'):
+							self.core.log.debug(mLink.get('text')+ ' is ja nice result')
+					
