@@ -31,6 +31,7 @@ class TopMovieFetcher(Hook):
         self.interval = self.getConfig("interval") * 60 
     def periodical(self):
 		f = open("topmoviefetches.txt", "a")
+		f.close()
 		self.core.log.debug('Period of TopMovieFetcher')
 		movieList = []
 		movieListTrans = []
@@ -151,6 +152,7 @@ class TopMovieFetcher(Hook):
 				finalPackages.append(r)
 				
 		for r in finalPackages:
-			self.core.api.addPackage(r['text'].encode("utf-8"), r["acceptedLinks"][0], 1 if self.getConfig("queue") else 0)
+			self.core.api.addPackage(r['text'].encode("utf-8"), r["acceptedLinks"][0].split('"'), 1 if self.getConfig("queue") else 0)
+			f = open("topmoviefetches.txt", "a")
 			f.write(r['title']+"\n") 
-		f.close()
+			f.close()
