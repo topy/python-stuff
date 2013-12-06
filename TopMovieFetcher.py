@@ -6,9 +6,50 @@ import re
 import tmdb
 import feedparser
 
+def parseFeeds(self):
+	movieList = []
+	
+	#apple feed
+	if self.getConfig('rssapple'):
+		feed = feedparser.parse('http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topMovies/xml')
+		for item in feed.entries:
+			movieList.append(item.title[0:item.title.find('-')])
+	#rottentomatoes feed
+	if self.getConfig('rssrottentomato'):
+		feed = feedparser.parse('http://www.rottentomatoes.com/syndication/rss/top_movies.xml')
+		for item in feed.entries:
+			movieList.append(item.title[4:])
+			
+	return movieList
+
+def tmdbLookup(self,movieList):
+	movieListTrans = []
+	if self.getConfig('tmdbapikey') == "":
+		self.core.log.error('No TMDB API Key given!')
+	else:
+		
+		tmdb.configure(self.getConfig('tmdbapikey'),self.getConfig('tmdblang'))
+		for title in movieList:
+			title = title.strip()
+			newtitle = re.sub("\(\d{4}\)$",'',title)
+			if newtitle != '':
+				title = newtitle
+			
+			self.core.log.debug('----------------------- try search ----> "' + title + '"')
+			movies = tmdb.Movies(title)
+			
+			#handling more results maybe later
+			for movie in movies.iter_results():
+				self.core.log.debug(movie['title'])
+				
+				movieListTrans.append(movie)
+				# maybe more later
+				break
+	return movieListTrans
+
 class TopMovieFetcher(Hook):
     __name__ = "TopMovieFetcher"
-    __version__ = "0.31"
+    __version__ = "0.3"
     __description__ = "Checks HD-AREA.org for new Movies. "
     __config__ = [	
 					("activated", "bool", "Activated", "False"),
@@ -26,63 +67,41 @@ class TopMovieFetcher(Hook):
 					("tmdblang","str","Language (en or de)","de")]
     __author_name__ = ("Studententyp")
     __author_mail__ = ("")
+	
+	
 
     def setup(self):
         self.interval = self.getConfig("interval") * 60 
+
+	
+
     def periodical(self):
-		f = open("topmoviefetches.txt", "a")
-		f.close()
 		self.core.log.debug('Period of TopMovieFetcher')
-		movieList = []
-		movieListTrans = []
 		
+		# create file
+		open("topmoviefetches.txt", "a").close()
+
 		#get feeds
-		
-		#apple feed
-		if self.getConfig('rssapple'):
-			feed = feedparser.parse('http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topMovies/xml')
-			for item in feed.entries:
-				movieList.append(item.title[0:item.title.find('-')])
-		#rottentomatoes feed
-		if self.getConfig('rssrottentomato'):
-			feed = feedparser.parse('http://www.rottentomatoes.com/syndication/rss/top_movies.xml')
-			for item in feed.entries:
-				movieList.append(item.title[4:])
-		
-		self.core.log.debug('check for movies')
+		movieList = parseFeeds(self)
+				
 		#check movies in tmdb
-		if self.getConfig('tmdbapikey') == "":
-			self.core.log.error('No TMDB API Key given!')
-		else:
-			
-			tmdb.configure(self.getConfig('tmdbapikey'),self.getConfig('tmdblang'))
-			for title in movieList:
-				title = title.strip()
-				newtitle = re.sub("\(\d{4}\)$",'',title)
-				if newtitle != '':
-					title = newtitle
-				
-				self.core.log.debug('----------------------- try search ----> "' + title + '"')
-				movies = tmdb.Movies(title)
-				
-				#handling more results maybe later
-				for movie in movies.iter_results():
-					self.core.log.debug(movie['title'])
-					movieListTrans.append(movie['title'])
-					# maybe more later
-					break
-		movieList = [] 
+		movieListTrans = tmdbLookup(self,movieList)
+		
 		packages = []
 		
-		s = open("topmoviefetches.txt").read()  
-		for title in movieListTrans:
-			if title in s:
-				self.core.log.info("TopMovieFetcher: "+title+" was already fetched. Skip search")
-				movieListTrans.remove(title)
+		s = open("topmoviefetches.txt").read()
+		movieListTransReduced = movieListTrans[:]
+		for movie in movieListTrans:
+			if str(movie['id']) in s:
+				self.core.log.info("TopMovieFetcher: "+movie['title']+" was already fetched. Skip search")
+				movieListTransReduced.remove(movie)
+
+		movieListTrans = movieListTransReduced
 		
 		#search on hd-area
 		if self.getConfig('usehdarea'):
-			for title in movieListTrans:
+			for movie in movieListTrans:
+				title = movie['title']
 				otitle = title
 				# prepare title
 				title = title.lower()
@@ -118,6 +137,7 @@ class TopMovieFetcher(Hook):
 									release['text'] = releaseName
 									release['link'] = href
 									release['title'] = otitle
+									release['id'] = movie['id']
 									releases.append(release)
 					
 				for release in releases:
@@ -154,5 +174,5 @@ class TopMovieFetcher(Hook):
 		for r in finalPackages:
 			self.core.api.addPackage(r['text'].encode("utf-8"), r["acceptedLinks"][0].split('"'), 1 if self.getConfig("queue") else 0)
 			f = open("topmoviefetches.txt", "a")
-			f.write(r['title']+"\n") 
+			f.write(str(r['id'])+";") 
 			f.close()
