@@ -13,14 +13,32 @@ def parseFeeds(self):
 	if self.getConfig('rssapple'):
 		feed = feedparser.parse('http://ax.itunes.apple.com/WebObjects/MZStoreServices.woa/ws/RSS/topMovies/xml')
 		for item in feed.entries:
-			movieList.append(item.title[0:item.title.find('-')])
+			movieList.append(replaceUmlauts( item.title[0:item.title.find('-')]))
 	#rottentomatoes feed
 	if self.getConfig('rssrottentomato'):
 		feed = feedparser.parse('http://www.rottentomatoes.com/syndication/rss/top_movies.xml')
 		for item in feed.entries:
-			movieList.append(item.title[4:])
+			movieList.append(replaceUmlauts( item.title[4:] ))
 			
+	#kino.de charts
+	if self.getConfig('rsskinode'):
+		feed = feedparser.parse('http://www.kino.de/rss/charts/')
+		for item in feed.entries:
+			movieList.append(replaceUmlauts(item.title))
+			
+	#remove duplicates from movieList
+	list(set(movieList))
+	
 	return movieList
+def replaceUmlauts(title):
+	title = title.replace(unichr(228),'ae')
+	title = title.replace(unichr(252),'ue')
+	title = title.replace(unichr(246),'oe')
+	title = title.replace(unichr(196),'Ae')
+	title = title.replace(unichr(220),'Ue')
+	title = title.replace(unichr(214),'Oe')
+	
+	return title
 
 def tmdbLookup(self,movieList):
 	movieListTrans = []
@@ -46,7 +64,78 @@ def tmdbLookup(self,movieList):
 				# maybe more later
 				break
 	return movieListTrans
+	
+def hdareaSearch(self,movieListTrans,packages):
+	#search on hd-area
+	for movie in movieListTrans:
+		title = movie['title']
+		otitle = title
+		# prepare title
+		title = title.lower()
+		title = replaceUmlauts(title)
+		title = title.replace(':','')
+		title = title.replace('.','')
+		title = title.replace('-','')
+		title = title.replace('  ',' ')
+			
+		searchLink = 'http://www.hd-area.org/?s=search&q=' + urllib2.quote(title)
+		self.core.log.debug('search with '+searchLink)
+		page = urllib2.urlopen(searchLink).read()
+		soup = BeautifulSoup(page)
+		releases = []
+		for content in soup.findAll("div",{"class":"whitecontent contentheight"}):
+			searchLinks = content.findAll('a')
+			
+			# if no results - search again with shorter title? maybe cut one,two,three words for better results?
+			# example Chroniken der Unterwelt - City of Bones -> no results
+			#         Chroniken der Unterwelt has results!
+			
+			for link in searchLinks:
+				href = link['href']
+				releaseName = link.getText()
+				
+				if self.getConfig('quality') in releaseName:
+					if self.getConfig('reqtext') == '' or self.getConfig('reqtext').lower() in releaseName.lower() and (self.getConfig('nottext')=='' or self.getConfig('nottext').lower() not in releaseName.lower()):
+						# does release name begins with first word of title; replace . with blanks in release name
+						if releaseName.replace('.',' ').lower().startswith(title.split(' ')[0]+" "):
+							release = {}
+							release['text'] = releaseName
+							release['link'] = href
+							release['title'] = otitle
+							release['id'] = movie['id']
+							releases.append(release)
+			
+		for release in releases:
+			# parse search result
+			self.core.log.debug("parse movie page " + release["link"])
+			page = urllib2.urlopen(release['link']).read()
+			soup = BeautifulSoup(page)
+			acceptedLinks = []
+			for download in soup.findAll("div",{"class":"download"}):
+				for descr in download.findAll("div",{"class":"beschreibung"}):
+					links = descr.findAll('span',{"style":"display:inline;"})
+					for link in links:
+						url = link.a["href"]
+						hoster = link.text
+						for prefhoster in self.getConfig('hoster').split(";"):
+							if prefhoster.lower() in hoster.lower():
+								# accepted release link
+								acceptedLinks.append(url)
+								# TODO: save alternative release link.
+			# build package for release
+			if len(acceptedLinks) > 0:
+				release['acceptedLinks'] = acceptedLinks
+				packages.append(release)
 
+def checkFetched(self,movieListTrans):
+	s = open("topmoviefetches.txt").read()
+	movieListTransReduced = movieListTrans[:]
+	for movie in movieListTrans:
+		if str(movie['id']) in s:
+			self.core.log.info("TopMovieFetcher: "+movie['title']+" was already fetched. Skip search")
+			movieListTransReduced.remove(movie)
+	return movieListTransReduced
+				
 class TopMovieFetcher(Hook):
     __name__ = "TopMovieFetcher"
     __version__ = "0.3"
@@ -56,6 +145,8 @@ class TopMovieFetcher(Hook):
 					("queue", "bool", "move Movies directly to Queue", "False"),
 					("rssapple","bool","Use Apple's Top Movies RSS","True"),
 					("rssrottentomato","bool","Use Rottentomatoes Top Movies RSS","True"),
+					("rsskinode","bool","Use German Top Movies Charts from Kino.de RSS","True"),
+					
 					("usehdarea","bool","Search on hd-area.org","True"),
 					("interval", "int", "Check interval in minutes", "60"),
 					("rating","float","min. IMDB rating","6.1"),
@@ -83,84 +174,18 @@ class TopMovieFetcher(Hook):
 
 		#get feeds
 		movieList = parseFeeds(self)
-				
+		
 		#check movies in tmdb
 		movieListTrans = tmdbLookup(self,movieList)
 		
 		packages = []
 		
-		s = open("topmoviefetches.txt").read()
-		movieListTransReduced = movieListTrans[:]
-		for movie in movieListTrans:
-			if str(movie['id']) in s:
-				self.core.log.info("TopMovieFetcher: "+movie['title']+" was already fetched. Skip search")
-				movieListTransReduced.remove(movie)
-
-		movieListTrans = movieListTransReduced
+		# check for already fetched ones
+		movieListTrans = checkFetched(self,movieListTrans)
 		
-		#search on hd-area
+		## search on hd-area.org
 		if self.getConfig('usehdarea'):
-			for movie in movieListTrans:
-				title = movie['title']
-				otitle = title
-				# prepare title
-				title = title.lower()
-				title = title.replace(unichr(228),'ae')
-				title = title.replace(unichr(252),'ue')
-				title = title.replace(unichr(246),'oe')
-				title = title.replace(':','')
-				title = title.replace('.','')
-				title = title.replace('-','')
-				title = title.replace('  ',' ')
-					
-				searchLink = 'http://www.hd-area.org/?s=search&q=' + urllib2.quote(title)
-				self.core.log.debug('search with '+searchLink)
-				page = urllib2.urlopen(searchLink).read()
-				soup = BeautifulSoup(page)
-				releases = []
-				for content in soup.findAll("div",{"class":"whitecontent contentheight"}):
-					searchLinks = content.findAll('a')
-					
-					# if no results - search again with shorter title? maybe cut one,two,three words for better results?
-					# example Chroniken der Unterwelt - City of Bones -> no results
-					#         Chroniken der Unterwelt has results!
-					
-					for link in searchLinks:
-						href = link['href']
-						releaseName = link.getText()
-						
-						if self.getConfig('quality') in releaseName:
-							if self.getConfig('reqtext') == '' or self.getConfig('reqtext').lower() in releaseName.lower() and (self.getConfig('nottext')=='' or self.getConfig('nottext').lower() not in releaseName.lower()):
-								# does release name begins with first word of title; replace . with blanks in release name
-								if releaseName.replace('.',' ').lower().startswith(title.split(' ')[0]+" "):
-									release = {}
-									release['text'] = releaseName
-									release['link'] = href
-									release['title'] = otitle
-									release['id'] = movie['id']
-									releases.append(release)
-					
-				for release in releases:
-					# parse search result
-					self.core.log.debug("parse movie page " + release["link"])
-					page = urllib2.urlopen(release['link']).read()
-					soup = BeautifulSoup(page)
-					acceptedLinks = []
-					for download in soup.findAll("div",{"class":"download"}):
-						for descr in download.findAll("div",{"class":"beschreibung"}):
-							links = descr.findAll('span',{"style":"display:inline;"})
-							for link in links:
-								url = link.a["href"]
-								hoster = link.text
-								for prefhoster in self.getConfig('hoster').split(";"):
-									if prefhoster.lower() in hoster.lower():
-										# accepted release link
-										acceptedLinks.append(url)
-										# TODO: save alternative release link.
-					# build package for release
-					if len(acceptedLinks) > 0:
-						release['acceptedLinks'] = acceptedLinks
-						packages.append(release)
+			hdareaSearch(self,movieListTrans,packages)
 		
 		## final preparation
 		finalMovieList = []
