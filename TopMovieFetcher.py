@@ -64,7 +64,17 @@ def tmdbLookup(self,movieList):
 				# maybe more later
 				break
 	return movieListTrans
+
 	
+def openUrl(url,host):
+	request = urllib2.Request(url)
+	request.add_header('User-Agent','Mozilla/5.0 (Windows NT 6.1; WOW64; rv:25.0) Gecko/20100101 Firefox/25.0')
+	request.add_header('Accept','	text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
+	request.add_header('Host',host)
+	opener = urllib2.build_opener()
+	return opener.open(request).read()
+##################################################
+###################### HD-AREA	
 def hdareaSearch(self,movieListTrans,packages):
 	#search on hd-area
 	for movie in movieListTrans:
@@ -127,6 +137,78 @@ def hdareaSearch(self,movieListTrans,packages):
 				release['acceptedLinks'] = acceptedLinks
 				packages.append(release)
 
+##################################################
+###################### HD-WORLD
+def hdworldSearch(self,movieListTrans,packages):
+	#search on hd-area
+	for movie in movieListTrans:
+		title = movie['title']
+		otitle = title
+		# prepare title
+		title = title.lower()
+		title = replaceUmlauts(title)
+		title = title.replace(':','')
+		title = title.replace('.','')
+		title = title.replace('-','')
+		title = title.replace('  ',' ')
+		
+		searchLink = 'http://hd-world.org/index.php?s=' + urllib2.quote(title)
+		self.core.log.debug('search with '+searchLink)
+		page = openUrl(searchLink,"hd-world.org")
+		
+		soup = BeautifulSoup(page)
+		releases = []
+		for content in soup.findAll("div",{"class":"post"}):
+			for heading in content.findAll("h1"):
+				searchLinks = heading.findAll('a')
+				
+				# if no results - search again with shorter title? maybe cut one,two,three words for better results?
+				# example Chroniken der Unterwelt - City of Bones -> no results
+				#         Chroniken der Unterwelt has results!
+				
+				for link in searchLinks:
+					href = link['href']
+					releaseName = link.getText()
+					
+					if "anmeldung" not in href and self.getConfig('quality') in releaseName:
+						if self.getConfig('reqtext') == '' or self.getConfig('reqtext').lower() in releaseName.lower() and (self.getConfig('nottext')=='' or self.getConfig('nottext').lower() not in releaseName.lower()):
+							# does release name begins with first word of title; replace . with blanks in release name
+							if releaseName.replace('.',' ').lower().startswith(title.split(' ')[0]+" "):
+								release = {}
+								release['text'] = releaseName
+								release['link'] = href
+								release['title'] = otitle
+								release['id'] = movie['id']
+								releases.append(release)
+			
+		for release in releases:
+			# parse search result
+			self.core.log.debug("parse movie page " + release["link"])
+			#page = urllib2.urlopen(release['link']).read()
+			page = openUrl(release['link'],"hd-world.org")
+			soup = BeautifulSoup(page)
+			acceptedLinks = []
+			for download in soup.findAll("div",{"class":"entry"}):
+				for link in download.findAll("a"):
+					url = link["href"]
+					hoster = link.text					
+					try:
+						psText = link.previousSibling.text.lower()
+						if "download" in psText or "mirror" in psText:				
+							for prefhoster in self.getConfig('hoster').split(";"):
+								if prefhoster.lower() in hoster.lower():
+									# accepted release link
+									self.core.log.debug("Accepted # "+url)
+									acceptedLinks.append(url)
+									# TODO: save alternative release link.
+					except Exception: 
+						pass
+			# build package for release
+			if len(acceptedLinks) > 0:
+				release['acceptedLinks'] = acceptedLinks
+				packages.append(release)
+		break
+
 def checkFetched(self,movieListTrans):
 	s = open("topmoviefetches.txt").read()
 	movieListTransReduced = movieListTrans[:]
@@ -146,7 +228,7 @@ class TopMovieFetcher(Hook):
 					("rssapple","bool","Use Apple's Top Movies RSS","True"),
 					("rssrottentomato","bool","Use Rottentomatoes Top Movies RSS","True"),
 					("rsskinode","bool","Use German Top Movies Charts from Kino.de RSS","True"),
-					
+					("usehdworld","bool","Search on hd-world.org","True"),
 					("usehdarea","bool","Search on hd-area.org","True"),
 					("interval", "int", "Check interval in minutes", "60"),
 					("rating","float","min. IMDB rating","6.1"),
@@ -186,6 +268,10 @@ class TopMovieFetcher(Hook):
 		## search on hd-area.org
 		if self.getConfig('usehdarea'):
 			hdareaSearch(self,movieListTrans,packages)
+		
+		## search on hd-world.org
+		if self.getConfig('usehdworld'):
+			hdworldSearch(self,movieListTrans,packages)
 		
 		## final preparation
 		finalMovieList = []
