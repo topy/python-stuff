@@ -220,7 +220,7 @@ def checkFetched(self,movieListTrans):
 				
 class TopMovieFetcher(Hook):
     __name__ = "TopMovieFetcher"
-    __version__ = "0.3"
+    __version__ = "0.4"
     __description__ = "Checks HD-AREA.org for new Movies. "
     __config__ = [	
 					("activated", "bool", "Activated", "False"),
