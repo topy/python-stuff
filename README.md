@@ -32,6 +32,7 @@ Planned:
 Requires (add to your /usr/share/pyload/module/lib folder)
 - https://github.com/doganaydin/themoviedb/blob/master/tmdb.py
 - http://www.python-requests.org/en/latest/user/install/#install
+- https://github.com/seatgeek/fuzzywuzzy
 
 
 Credits:
