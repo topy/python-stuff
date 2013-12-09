@@ -48,7 +48,7 @@ def tmdbLookup(self,movieList):
 		self.core.log.error('No TMDB API Key given!')
 	else:
 		
-		tmdb.configure(self.getConfig('tmdbapikey'),self.getConfig('tmdblang'))
+		tmdb.configure(self.getConfig('tmdbapikey'),"de")
 		for title in movieList:
 			title = title.strip()
 			newtitle = re.sub("\(\d{4}\)$",'',title)
@@ -272,7 +272,6 @@ class TopMovieFetcher(Hook):
 					("nottext","str","Text not in release name",".3D"),
 					
 					("tmdbapikey","str","themoviedb.org API-Key",""),
-					("tmdblang","str","Language (en or de)","de"),
 					
 					("usetrakttv","bool","Fetch from trakt.tv-list","False"),
 					("traktvapikey","str","trakt.tv API-Key",""),
