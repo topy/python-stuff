@@ -252,7 +252,7 @@ def checkFetched(self,movieListTrans):
 				
 class TopMovieFetcher(Hook):
     __name__ = "TopMovieFetcher"
-    __version__ = "0.4"
+    __version__ = "0.5"
     __description__ = "Checks HD-AREA.org for new Movies. "
     __config__ = [	
 					("activated", "bool", "Activated", "False"),
@@ -269,7 +269,7 @@ class TopMovieFetcher(Hook):
 					("quality", "str", "Quality (720p or 1080p)", "720p"),
 					("hoster", "str", "Preferred Hoster (seperated by ;)","uploaded"),
 					("reqtext","str","Required text in release name","x264"),
-					("nottext","str","Text not in release name",".3D."),
+					("nottext","str","Text not in release name",".3D"),
 					
 					("tmdbapikey","str","themoviedb.org API-Key",""),
 					("tmdblang","str","Language (en or de)","de"),
