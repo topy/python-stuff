@@ -74,17 +74,27 @@ def fetchTraktTvList(self,movieList):
 		pw = self.getConfig("traktvpwhash")
 		listname = self.getConfig("traktvlist")
 		url = "http://api.trakt.tv/user/list.json/" + apikey + "/" +username + "/" + listname
+		## build request
 		request = urllib2.Request(url,json.dumps({"username" : username,"password" : pw}))
 		request.add_header('User-Agent','Mozilla/5.0 (Windows NT 6.1; WOW64; rv:25.0) Gecko/20100101 Firefox/25.0')
 		request.add_header('Accept','	text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
 		request.add_header('Host',"api.trakt.tv") # important!!
-		opener = urllib2.build_opener()
-		result = opener.open(request).read()
 		
-		list = json.loads(result)
-		for item in list["items"]:
-			if item["type"] == "movie":
-				movieList.append(item["movie"]["title"])
+		## open url
+		opener = urllib2.build_opener()
+		
+		try:
+			result = opener.open(request).read()
+			
+			list = json.loads(result)
+			if hasattr(list,"items"):
+				for item in list["items"]:
+					if item["type"] == "movie":
+						movieList.append(item["movie"]["title"])
+					elif item["type"] == "show":
+						self.core.log.info("tv-shows currently not supported")
+		except Exception:
+			self.core.log.error("can't connect to trakt.tv - or authentication failed")
 			
 	return movieList
 	
@@ -98,6 +108,116 @@ def openUrl(url,host):
 	return opener.open(request).read()
 ##################################################
 ###################### HD-AREA	
+
+class DataMapper( object ):
+    def __init__( self, aStrategy ):
+        self.s = aStrategy
+	
+	## check if tmdbid is on fetched list
+	def onFetchedList( self, tmdbid ):
+		return self.s.isOnFetchedList( self, title )
+		
+	## add tmdbid to fetched list
+	def toFetchedList( self, tmdbid ):
+		self.s.toFetchedList( self, tmdbid )
+		
+	## remove tmdbid to fetched list
+	def rmFromFetchedList( self, tmdbid ):
+		self.s.rmFromFetchedList( self, tmdbid )
+	
+	## is title in cache? get tmdbid!
+    def fromCache( self, title ):
+        return self.s.getFromCache( self, title )
+	
+	## write tmdbid to cache
+	def toCache( self, tmdbid, title):
+		self.s.writeToCache( self, tmdbid, title )
+
+class PersistentStrategy( object ):
+    pass
+
+class TextFile( PersistentStrategy ):
+	def importFile ():
+		return json.load(open("topmoviecache.txt").read())
+		
+	def writeFile (content):
+		f = open("topmoviecache.txt", "w")
+		f.write(json.dumps(content)) 
+		f.close()
+		
+	## check if tmdbid is on fetched list
+	def isOnFetchedList( self, tmdbid ):
+		content = importFile()
+		if hasattr(content,"fetchedList") and tmdbid in content["fetchedList"]:
+			return True
+		else:
+			return False
+		
+	## add tmdbid to fetched list
+	def toFetchedList( self, tmdbid ):
+		content = importFile()
+		if not hasattr(content,"fetchedList"):
+			content["fetchedList"] = []
+		content["fetchedList"].append(tmdbid)
+		
+	## remove tmdbid to fetched list
+	def rmFromFetchedList( self, tmdbid ):
+		content = importFile()
+		if not hasattr(content,"fetchedList"):
+			content["fetchedList"] = content["fetchedList"].remove(tmdbid)
+		writeFile(content)
+	
+	## is title in cache? get tmdbid!
+    def getFromCache( self, title ):
+        pass # an implementation
+	
+	## write tmdbid to cache
+	def writeToCache( self, tmdbid, title):
+		pass # an implementation
+	
+
+class SqlliteDatabase( PersistentStrategy ):
+	## check if tmdbid is on fetched list
+	def isOnFetchedList( self, tmdbid ):
+		pass # an implementation
+		
+	## add tmdbid to fetched list
+	def toFetchedList( self, tmdbid ):
+		pass # an implementation
+		
+	## remove tmdbid to fetched list
+	def rmFromFetchedList( self, tmdbid ):
+		pass # an implementation
+	
+	## is title in cache? get tmdbid!
+    def getFromCache( self, title ):
+        pass # an implementation
+	
+	## write tmdbid to cache
+	def writeToCache( self, tmdbid, title):
+		pass # an implementation
+		
+class SimpleMovie ( object ):
+	def __init__(self):
+		self._tmdbid = 0
+		self._title = ""
+		self._release = ""
+	
+	def tmdbid(self):
+		return self._tmdbid
+	def tmdbid(self,tmdbid):
+		self._tmdbid = tmdbid
+		
+	def title(self):
+		return self._title
+	def title(self,title):
+		self._title = title
+		
+	def release(self):
+		return self._release
+	def release(self,release):
+		self._release = release
+	
 def hdareaSearch(self,movieListTrans,packages):
 	#search on hd-area
 	for movie in movieListTrans:
@@ -242,6 +362,11 @@ def checkReleaseName(self,releaseName,title):
 	return False
 		
 def checkFetched(self,movieListTrans):
+	if self.dm.isOnFetchedList(self, str(movie['id'])):
+		self.core.log.debug("is on fetched list - new")
+	elif:
+		self.core.log.debug("is not on fetched list - new")
+	
 	s = open("topmoviefetches.txt").read()
 	movieListTransReduced = movieListTrans[:]
 	for movie in movieListTrans:
@@ -285,12 +410,15 @@ class TopMovieFetcher(Hook):
 
     def setup(self):
 		self.interval = self.getConfig("interval") * 60 
+		self.dm = DataMapper(TextFile())
 
     def periodical(self):
+		
 		self.core.log.info('Period of TopMovieFetcher started')
 		
 		# create file
 		open("topmoviefetches.txt", "a").close()
+		open("topmoviecache.txt", "a").close()
 
 		#get feeds
 		movieList = parseFeeds(self)
