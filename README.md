@@ -4,6 +4,8 @@ python-stuff
 pyload-hook: TopMovieFetcher
 ----------------------------
 
+see http://forum.pyload.org/viewtopic.php?f=9&t=3153
+
 - fetches movies from rss feeds (see list below)
 - multilingual support
 - quality selection / bad word filter (eg 3D)
