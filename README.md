@@ -14,6 +14,9 @@ Supported Feeds
 - Top Movies from rottentomatoes http://www.rottentomatoes.com/syndication/rss/top_movies.xml
 - Top Movies from kino.de http://www.kino.de/rss/charts/
 
+Supported Third-Party Apps
+- trakt.tv private lists
+
 Planned:
 - add more search-sites (eg hd-world)
 - save alternative links if a package is partly offline
