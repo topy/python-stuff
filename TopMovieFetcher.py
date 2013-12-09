@@ -1,10 +1,12 @@
 # -*- coding: utf-8 -*-
 from module.plugins.Hook import Hook
 import urllib2
+#import urllib
 from BeautifulSoup import BeautifulSoup
 import re
 import tmdb
 import feedparser
+import simplejson as json
 
 def parseFeeds(self):
 	movieList = []
@@ -65,6 +67,27 @@ def tmdbLookup(self,movieList):
 				break
 	return movieListTrans
 
+def fetchTraktTvList(self,movieList):
+	if self.getConfig("usetrakttv"):
+		apikey = self.getConfig("traktvapikey")
+		username = self.getConfig("traktvusername")
+		pw = self.getConfig("traktvpwhash")
+		listname = self.getConfig("traktvlist")
+		url = "http://api.trakt.tv/user/list.json/" + apikey + "/" +username + "/" + listname
+		request = urllib2.Request(url,json.dumps({"username" : username,"password" : pw}))
+		request.add_header('User-Agent','Mozilla/5.0 (Windows NT 6.1; WOW64; rv:25.0) Gecko/20100101 Firefox/25.0')
+		request.add_header('Accept','	text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8')
+		request.add_header('Host',"api.trakt.tv") # important!!
+		opener = urllib2.build_opener()
+		result = opener.open(request).read()
+		
+		list = json.loads(result)
+		for item in list["items"]:
+			if item["type"] == "movie":
+				movieList.append(item["movie"]["title"])
+			
+	return movieList
+	
 	
 def openUrl(url,host):
 	request = urllib2.Request(url)
@@ -105,15 +128,13 @@ def hdareaSearch(self,movieListTrans,packages):
 				releaseName = link.getText()
 				
 				if self.getConfig('quality') in releaseName:
-					if self.getConfig('reqtext') == '' or self.getConfig('reqtext').lower() in releaseName.lower() and (self.getConfig('nottext')=='' or self.getConfig('nottext').lower() not in releaseName.lower()):
-						# does release name begins with first word of title; replace . with blanks in release name
-						if releaseName.replace('.',' ').lower().startswith(title.split(' ')[0]+" "):
-							release = {}
-							release['text'] = releaseName
-							release['link'] = href
-							release['title'] = otitle
-							release['id'] = movie['id']
-							releases.append(release)
+					if checkReleaseName(self,releaseName,title):
+						release = {}
+						release['text'] = releaseName
+						release['link'] = href
+						release['title'] = otitle
+						release['id'] = movie['id']
+						releases.append(release)
 			
 		for release in releases:
 			# parse search result
@@ -171,15 +192,13 @@ def hdworldSearch(self,movieListTrans,packages):
 					releaseName = link.getText()
 					
 					if "anmeldung" not in href and self.getConfig('quality') in releaseName:
-						if self.getConfig('reqtext') == '' or self.getConfig('reqtext').lower() in releaseName.lower() and (self.getConfig('nottext')=='' or self.getConfig('nottext').lower() not in releaseName.lower()):
-							# does release name begins with first word of title; replace . with blanks in release name
-							if releaseName.replace('.',' ').lower().startswith(title.split(' ')[0]+" "):
-								release = {}
-								release['text'] = releaseName
-								release['link'] = href
-								release['title'] = otitle
-								release['id'] = movie['id']
-								releases.append(release)
+						if checkReleaseName(self,releaseName,title):
+							release = {}
+							release['text'] = releaseName
+							release['link'] = href
+							release['title'] = otitle
+							release['id'] = movie['id']
+							releases.append(release)
 			
 		for release in releases:
 			# parse search result
@@ -209,6 +228,19 @@ def hdworldSearch(self,movieListTrans,packages):
 				packages.append(release)
 		break
 
+def checkReleaseName(self,releaseName,title):
+	releaseName = releaseName.lower()
+	reqtext = self.getConfig('reqtext').lower()
+	nottext = self.getConfig('nottext').lower()
+	
+	# contains required text / not contains bad words
+	if (reqtext == '' or reqtext in releaseName) and (nottext == '' or nottext not in releaseName):
+		# does release name begins with first word of title; replace . with blanks in release name
+		if releaseName.replace('.',' ').startswith(title.split(' ')[0]+" "):
+			return True
+	
+	return False
+		
 def checkFetched(self,movieListTrans):
 	s = open("topmoviefetches.txt").read()
 	movieListTransReduced = movieListTrans[:]
@@ -220,42 +252,52 @@ def checkFetched(self,movieListTrans):
 				
 class TopMovieFetcher(Hook):
     __name__ = "TopMovieFetcher"
-    __version__ = "0.4"
+    __version__ = "0.3"
     __description__ = "Checks HD-AREA.org for new Movies. "
     __config__ = [	
 					("activated", "bool", "Activated", "False"),
 					("queue", "bool", "move Movies directly to Queue", "False"),
+					
 					("rssapple","bool","Use Apple's Top Movies RSS","True"),
 					("rssrottentomato","bool","Use Rottentomatoes Top Movies RSS","True"),
 					("rsskinode","bool","Use German Top Movies Charts from Kino.de RSS","True"),
+					
 					("usehdworld","bool","Search on hd-world.org","True"),
 					("usehdarea","bool","Search on hd-area.org","True"),
+					
 					("interval", "int", "Check interval in minutes", "60"),
-					("rating","float","min. IMDB rating","6.1"),
 					("quality", "str", "Quality (720p or 1080p)", "720p"),
 					("hoster", "str", "Preferred Hoster (seperated by ;)","uploaded"),
 					("reqtext","str","Required text in release name","x264"),
-					("nottext","str","Text not in release name","3D"),
+					("nottext","str","Text not in release name",".3D."),
+					
 					("tmdbapikey","str","themoviedb.org API-Key",""),
-					("tmdblang","str","Language (en or de)","de")]
+					("tmdblang","str","Language (en or de)","de"),
+					
+					("usetrakttv","bool","Fetch from trakt.tv-list","False"),
+					("traktvapikey","str","trakt.tv API-Key",""),
+					("traktvusername","str","trakt.tv Username",""),
+					("traktvpwhash","str","trakt.tv Password (SHA1-Hash!)",""),
+					("traktvlist","str","trakt.tv List which should be fetched","")]
     __author_name__ = ("Studententyp")
     __author_mail__ = ("")
 	
 	
 
     def setup(self):
-        self.interval = self.getConfig("interval") * 60 
-
-	
+		self.interval = self.getConfig("interval") * 60 
 
     def periodical(self):
-		self.core.log.debug('Period of TopMovieFetcher')
+		self.core.log.info('Period of TopMovieFetcher started')
 		
 		# create file
 		open("topmoviefetches.txt", "a").close()
 
 		#get feeds
 		movieList = parseFeeds(self)
+		
+		#use third party services
+		movieList = fetchTraktTvList(self,movieList)
 		
 		#check movies in tmdb
 		movieListTrans = tmdbLookup(self,movieList)
@@ -280,6 +322,7 @@ class TopMovieFetcher(Hook):
 			# 'remove' duplicates
 			if not r['title'] in finalMovieList:
 				finalMovieList.append(r['title'])
+				
 				finalPackages.append(r)
 				
 		for r in finalPackages:
@@ -287,3 +330,5 @@ class TopMovieFetcher(Hook):
 			f = open("topmoviefetches.txt", "a")
 			f.write(str(r['id'])+";") 
 			f.close()
+		
+		self.core.log.info('Period of TopMovieFetcher ended')
