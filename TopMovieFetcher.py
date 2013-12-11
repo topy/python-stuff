@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from module.plugins.Hook import Hook
 import urllib2
-#import urllib
 from BeautifulSoup import BeautifulSoup
 import re
 import tmdb
@@ -33,6 +32,7 @@ def parseFeeds(self):
 	list(set(movieList))
 
 	return movieList
+
 def replaceUmlauts(title):
 	title = title.replace(unichr(228), "ae").replace(unichr(196), "Ae")  # äÄ
 	title = title.replace(unichr(252), "ue").replace(unichr(220), "Ue")  # üÜ
@@ -54,9 +54,9 @@ def tmdbLookup(self, movieList):
 				title = newtitle
 			
 			self.core.log.debug("----------------------- try search ----> '" + title + "'")
-			cacheId = self.dm.fromCache(self.dm,title)
+			cacheId = self.dm.fromCache(title)
 			if cacheId != False:
-				movie = self.dm.fromMovieCache(self.dm,cacheId)
+				movie = self.dm.fromMovieCache(cacheId)
 				if movie != False:
 					movieListTrans.append(movie)
 					self.core.log.debug(movie["title"] + " (from local MovieCache)")
@@ -68,8 +68,8 @@ def tmdbLookup(self, movieList):
 			for movie in movies.iter_results():
 				self.core.log.debug(movie["title"])
 				movieListTrans.append(movie)
-				self.dm.toCache(self.dm, movie["id"], [movie["title"], title])
-				self.dm.toMovieCache(self.dm, movie)
+				self.dm.toCache(movie["id"], [movie["title"], title])
+				self.dm.toMovieCache(movie)
 				# maybe more later
 				break
 	return movieListTrans
@@ -119,119 +119,198 @@ def openUrl(url, host, data=""):
 	return opener.open(request).read()
 
 class DataMapper(object):
-	def __init__(self, aStrategy):
+	def __init__(self, hook, aStrategy):
 		self.s = aStrategy
+		self.hook = hook
+		
+	def debugMessage(self, message):
+		self.hook.core.log.debug(message)
 
 	## check if tmdbid is on fetched list
 	def onFetchedList(self, tmdbid):
-		return self.s.isOnFetchedList(self, title)
+		return self.s.isOnFetchedList(str(tmdbid))
 
 	## add tmdbid to fetched list
 	def toFetchedList(self, tmdbid):
-		self.s.toFetchedList(self, tmdbid)
+		self.s.toFetchedList(str(tmdbid))
 
 	## remove tmdbid to fetched list
 	def rmFromFetchedList(self, tmdbid):
-		self.s.rmFromFetchedList(self, tmdbid)
+		self.s.rmFromFetchedList(str(tmdbid))
 
 	## is title in cache? get tmdbid!
 	def fromCache(self, title):
-		return self.s.getFromCache(self, title)
+		return self.s.getFromCache(title)
 
 	## write tmdbid to cache
 	def toCache(self, tmdbid, titles):
-		self.s.writeToCache(self, tmdbid, titles)
+		self.s.writeToCache(str(tmdbid), titles)
 
 	## get Movie from MovieCache by
 	def fromMovieCache(self, tmdbid):
-		self.s.getFromMovieCache(self, tmdbid)
+		return self.s.getFromMovieCache(str(tmdbid))
 
 	## write tmdbmovie to local MovieCache
 	def toMovieCache(self, tmdbmovie):
-		self.s.writeToMovieDb(self, tmdbmovie)
+		self.s.writeToMovieDb(tmdbmovie)
+		
+	## is on do-not-forget-list
+	def onDoNotForgetList(self, tmdbid):
+		return self.s.isOnDoNotForgetList(str(tmdbid))
+		
+	## put on do-not-forget-list
+	def doNotForget(self, tmdbid):
+		self.s.toDoNotForgetList(str(tmdbid))
+
+	## rm movie from do-not-forget-list
+	def rmFromDoNotForgetList(self, tmdbid):
+		self.s.rmFromDoNotForgetList(str(tmdbid))
+		
+	## get do-not-forget-list
+	def doNotForgetList(self):
+		return self.s.getDoNotForgetList()
 
 class PersistentStrategy(object):
 	pass
 
 class TextFile(PersistentStrategy):
-	def importFile():
-		return json.load(open("topmoviecache.txt").read())
+	def __init__(self, hook):
+		self.hook = hook
+	
+	def debugMessage(self, message):
+		self.hook.core.log.debug(message)
+	
+	def importFile(self):
+		f = open("topmoviecache.txt").read()
+		try:
+			r = json.loads(f)
+		except Exception:
+			self.debugMessage("importFile exception.. maybe empty? let's create an empty object")
+			r = {}
+		return r
 
-	def writeFile(content):
+	def writeFile(self, content):
 		f = open("topmoviecache.txt", "w")
 		f.write(json.dumps(content))
 		f.close()
 
 	## check if tmdbid is on fetched list
 	def isOnFetchedList(self, tmdbid):
-		content = importFile()
-		if hasattr(content, "fetchedList") and tmdbid in content["fetchedList"]:
+		content = self.importFile()
+		if "fetchedList" in content and tmdbid in content["fetchedList"]:
 			return True
 		else:
 			return False
 
 	## add tmdbid to fetched list
 	def toFetchedList(self, tmdbid):
-		content = importFile()
-		if not hasattr(content, "fetchedList"):
+		content = self.importFile()
+		if not "fetchedList" in content:
 			content["fetchedList"] = []
-		content["fetchedList"].append(tmdbid)
+
+		if not tmdbid in content["fetchedList"]:
+			content["fetchedList"].append(tmdbid)
+
+		self.writeFile(content)
 
 	## remove tmdbid to fetched list
 	def rmFromFetchedList(self, tmdbid):
-		content = importFile()
-		if hasattr(content, "fetchedList"):
+		content = self.importFile()
+		if "fetchedList" in content:
 			content["fetchedList"] = content["fetchedList"].remove(tmdbid)
-		writeFile(content)
+		self.writeFile(content)
 
 	## is title in cache? get tmdbid!
 	def getFromCache(self, title):
-		content = importFile()
-		if not hasattr(content, "cache"):
+		content = self.importFile()
+		if not "cache" in content:
 			content["cache"] = {}
 	
-		for tmdbid, titles in content["cache"]:
-			if title in titles:
+		for tmdbid in content["cache"]:
+			if title in content["cache"][tmdbid]:
 				return tmdbid
 	
-		writeFile(content)
+		self.writeFile(content)
 		return False
 
 	## write tmdbid to cache
 	def writeToCache(self, tmdbid, titles):
-		content = importFile()
-		if not hasattr(content, "cache"):
+		content = self.importFile()
+		if not "cache" in content:
 			content["cache"] = {}
 
-		if hasattr(content["cache"], tmdbid):
+		if tmdbid in content["cache"]:
 			for title in content["cache"][tmdbid]:
 				if not title in content["cache"][tmdbid]:
 					content["cache"][tmdbid].append(title)
 		else:
 			content["cache"][tmdbid] = titles
+		
+		content["cache"][tmdbid] = list(set(content["cache"][tmdbid]))
 
-		writeFile(content)
+		self.writeFile(content)
 
 	## get Movie from MovieCache by
 	def getFromMovieCache(self, tmdbid):
-		content = importFile()
-		if not hasattr(content, "movieCache"):
+		content = self.importFile()
+		if not "movieCache" in content:
 			content["movieCache"] = {}
 
-		if hasattr(content["movieCache"], tmdbid):
+		if tmdbid in content["movieCache"]:
 			return content["movieCache"][tmdbid]
 
-		writeFile(content)
+		self.writeFile(content)
 		return False
 
 	## write tmdbmovie to local MovieCache
 	def writeToMovieDb(self, tmdbmovie):
-		content = importFile()
-		if not hasattr(content, "movieCache"):
+		content = self.importFile()
+		if not "movieCache" in content:
 			content["movieCache"] = {}
 
-		content["movieCache"][tmdbmovie["id"]] = tmdbmovie
-		writeFile(content)
+		content["movieCache"][str(tmdbmovie["id"])] = tmdbmovie
+		self.writeFile(content)
+		
+	## is on do-not-forget-list
+	def isOnDoNotForgetList(self, tmdbid):
+		content = self.importFile()
+		if not "doNotForgetCache" in content:
+			content["doNotForgetCache"] = []
+			
+		if tmdbid in content["doNotForgetCache"]:
+			return True
+			
+		self.writeFile(content)
+		return False
+
+	## put on do-not-forget-list
+	def toDoNotForgetList(self, tmdbid):
+		content = self.importFile()
+		if not "doNotForgetCache" in content:
+			content["doNotForgetCache"] = []
+			
+		if not tmdbid in content["doNotForgetCache"]:
+			content["doNotForgetCache"].append(tmdbid)
+			
+		self.writeFile(content)
+		return False
+		
+	## rm movie from do-not-forget-list
+	def rmFromDoNotForgetList(self, tmdbid):
+		content = self.importFile()
+		if "doNotForgetCache" in content:
+			content["doNotForgetCache"] = content["doNotForgetCache"].remove(tmdbid)
+
+		self.writeFile(content)
+		
+	## get do-not-forget-list
+	def getDoNotForgetList(self):
+		content = self.importFile()
+		if not "doNotForgetCache" in content:
+			content["doNotForgetCache"] = []
+		
+		self.writeFile(content)
+		return content["doNotForgetCache"]
 
 class SqlliteDatabase(PersistentStrategy):
 	## check if tmdbid is on fetched list
@@ -260,6 +339,22 @@ class SqlliteDatabase(PersistentStrategy):
 
 	## write tmdbmovie to local MovieCache
 	def writeToMovieDb(self, tmdbmovie):
+		pass # an implementation
+
+	## is on do-not-forget-list
+	def isOnDoNotForgetList(self, tmdbid):
+		pass # an implementation
+
+	## put on do-not-forget-list
+	def toDoNotForgetList(self, tmdbid):
+		pass # an implementation
+
+	## rm from do-not-forget-list
+	def rmFromDoNotForgetList(self, tmdbid):
+		pass # an implementation
+
+	## get do-not-forget-list
+	def getDoNotForgetList(self):
 		pass # an implementation
 
 ##################################################
@@ -302,6 +397,11 @@ def hdareaSearch(self, movieListTrans, packages):
 						release["title"] = otitle
 						release["id"] = movie["id"]
 						releases.append(release)
+
+		# if not result.. add to do-not-forget-list
+		if len(releases) == 0:
+			self.core.log.info("added " + movie["title"] + "(" + str(movie["id"]) + ") to do-not-forget-List")
+			self.dm.doNotForget(movie["id"])
 
 		for release in releases:
 			# parse search result
@@ -368,6 +468,11 @@ def hdworldSearch(self, movieListTrans, packages):
 							release["id"] = movie["id"]
 							releases.append(release)
 
+		# if not result.. add to do-not-forget-list
+		if len(releases) == 0:
+			self.core.log.info("added " + movie["title"] + "(" + str(movie["id"]) + ") to do-not-forget-List")
+			self.dm.doNotForget(movie["id"])
+
 		for release in releases:
 			# parse search result
 			self.core.log.debug("parse movie page " + release["link"])
@@ -394,7 +499,6 @@ def hdworldSearch(self, movieListTrans, packages):
 			if len(acceptedLinks) > 0:
 				release["acceptedLinks"] = acceptedLinks
 				packages.append(release)
-		break
 
 def checkReleaseName(self, releaseName, title):
 	releaseName = releaseName.lower()
@@ -409,19 +513,29 @@ def checkReleaseName(self, releaseName, title):
 
 	return False
 
-def checkFetched(self, movieListTrans):
-	if self.dm.isOnFetchedList(self, str(movie["id"])):
-		self.core.log.debug("is on fetched list - new")
-	else:
-		self.core.log.debug("is not on fetched list - new")
+def prepareTitleList(self, movieListTrans):
 
-	s = open("topmoviefetches.txt").read()
+	## add movies from do-not-forget-list
+	for tmdbid in self.dm.doNotForgetList():
+		dnfm = self.dm.fromMovieCache(tmdbid)
+		movieListTrans.append(dnfm)
+
+	## check for already fetched movies and remove
 	movieListTransReduced = movieListTrans[:]
 	for movie in movieListTrans:
-		if str(movie["id"]) in s:
+		if self.dm.onFetchedList(movie["id"]):
 			self.core.log.info("TopMovieFetcher: " + movie["title"] + " was already fetched. Skip search")
 			movieListTransReduced.remove(movie)
-	return movieListTransReduced
+
+	## remove duplicates
+	movieListIds = []
+	movieList = []
+	for movie in movieListTransReduced:
+		if not movie["id"] in movieListIds:
+			movieListIds.append(movie["id"])
+			movieList.append(movie)
+	
+	return movieList
 
 class TopMovieFetcher(Hook):
 	__name__ = "TopMovieFetcher"
@@ -451,14 +565,13 @@ class TopMovieFetcher(Hook):
 
 	def setup(self):
 		self.interval = self.getConfig("interval") * 60 
-		self.dm = DataMapper(TextFile())
+		self.dm = DataMapper(self, TextFile(self))
 
 	def periodical(self):
 
 		self.core.log.info("Period of TopMovieFetcher started")
 
 		# create file
-		open("topmoviefetches.txt", "a").close()
 		open("topmoviecache.txt", "a").close()
 
 		#get feeds
@@ -471,17 +584,18 @@ class TopMovieFetcher(Hook):
 		movieListTrans = tmdbLookup(self, movieList)
 
 		packages = []
+		movieList = []
 
-		# check for already fetched ones
-		movieListTrans = checkFetched(self, movieListTrans)
+		# prepare final title-search list
+		movieList = prepareTitleList(self, movieListTrans)
 
 		## search on hd-area.org
 		if self.getConfig("usehdarea"):
-			hdareaSearch(self, movieListTrans, packages)
+			hdareaSearch(self, movieList, packages)
 
 		## search on hd-world.org
 		if self.getConfig("usehdworld"):
-			hdworldSearch(self, movieListTrans, packages)
+			hdworldSearch(self, movieList, packages)
 
 		## final preparation
 		finalMovieList = []
@@ -490,13 +604,10 @@ class TopMovieFetcher(Hook):
 			# "remove" duplicates
 			if not r["title"] in finalMovieList:
 				finalMovieList.append(r["title"])
-
 				finalPackages.append(r)
 
 		for r in finalPackages:
-			self.core.api.addPackage(r["text"].encode("utf-8"), r["acceptedLinks"][0].split('"'), 1 if self.getConfig("queue") else 0)
-			f = open("topmoviefetches.txt", "a")
-			f.write(str(r["id"]) + ";") 
-			f.close()
+			self.core.api.addPackage(r["text"].encode("utf-8"), r["acceptedLinks"][0].split('"'), 1 if self.getConfig("queue") else 0)			
+			self.dm.toFetchedList(r["id"])
 
 		self.core.log.info("Period of TopMovieFetcher ended")
