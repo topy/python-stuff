@@ -128,7 +128,8 @@ class NotificationMapper(object):
 		
 		if self.hook.getConfig('pushoverkey') != "":
 			self.s.append(PushOver(self.hook, self.hook.getConfig('pushoverkey')))
-		elif self.hook.getConfig('notifymyandroidkey') != "":
+		
+		if self.hook.getConfig('notifymyandroidkey') != "":
 			self.s.append(NotifyMyAndroid(self.hook, self.hook.getConfig('notifymyandroidkey')))
 		
 	def notify(self, title, message):
