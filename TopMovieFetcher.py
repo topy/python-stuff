@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from module.plugins.Hook import Hook
 import urllib2
+import urllib
+import httplib
 from BeautifulSoup import BeautifulSoup
 import re
 import tmdb
@@ -53,20 +55,20 @@ def tmdbLookup(self, movieList):
 			if newtitle != "":
 				title = newtitle
 			
-			self.core.log.debug("----------------------- try search ----> '" + title + "'")
+			##self.core.log.debug("----------------------- try search ----> '" + title + "'")
 			cacheId = self.dm.fromCache(title)
 			if cacheId != False:
 				movie = self.dm.fromMovieCache(cacheId)
 				if movie != False:
 					movieListTrans.append(movie)
-					self.core.log.debug(movie["title"] + " (from local MovieCache)")
+					##self.core.log.debug(movie["title"] + " (from local MovieCache)")
 					continue
 
 			movies = tmdb.Movies(title)
 
 			#handling more results maybe later
 			for movie in movies.iter_results():
-				self.core.log.debug(movie["title"])
+				##self.core.log.debug(movie["title"])
 				movieListTrans.append(movie)
 				self.dm.toCache(movie["id"], [movie["title"], title])
 				self.dm.toMovieCache(movie)
@@ -99,10 +101,10 @@ def fetchTraktTvList(self, movieList):
 				if item["type"] == "movie":
 					movieList.append(item["movie"]["title"])
 				elif item["type"] == "show":
-					self.core.log.info("tv-shows not supported!")
+					self.core.log.info("trakt.tv | tv-shows not supported!")
 
 		except Exception:
-			self.core.log.error("can't connect to trakt.tv - or authentication failed")
+			self.core.log.error("trakt.tv | can't connect to trakt.tv - or authentication failed")
 
 	return movieList
 
@@ -117,6 +119,60 @@ def openUrl(url, host, data=""):
 	request.add_header("Host", host) ## seems to be important on most services
 	opener = urllib2.build_opener()
 	return opener.open(request).read()
+	
+class NotificationMapper(object):
+	def __init__(self, hook):
+		self.hook = hook
+		
+		self.s = []
+		
+		if self.hook.getConfig('pushoverkey') != "":
+			self.s.append(PushOver(self.hook, self.hook.getConfig('pushoverkey')))
+		elif self.hook.getConfig('notifymyandroidkey') != "":
+			self.s.append(NotifyMyAndroid(self.hook, self.hook.getConfig('notifymyandroidkey')))
+		
+	def notify(self, title, message):
+		for s in self.s:
+			s.notify(title,message)
+			
+class NotificationService(object):
+	def __init__(self, hook, key):
+		self.hook = hook
+		self.key = key
+
+	def debugMessage(self, message):
+		self.hook.core.log.debug(message)
+
+class NotifyMyAndroid(NotificationService):
+		
+	def notify(self, title, message):
+		key = 'apikey=' + self.key
+		a = 'application=MovieFetcher'
+		e = 'event='+urllib2.quote(title.encode("utf8"))
+		d = 'description='+urllib2.quote(message.encode("utf8"))
+		url = 'https://www.notifymyandroid.com/publicapi/notify'
+		url = url + '?' + key + '&' + a + '&' + e + '&' + d
+		
+		#self.debugMessage("NotifyMyAndroid: "+url)
+		result = openUrl(url, 'notifymyandroid.com')
+		
+		if not 'code="200"' in result:
+			self.hook.core.log.info('NotifyMyAndroid | Notification failed! Check your API-Key!')
+
+class PushOver(NotificationService):
+	def debugMessage(self, message):
+		self.hook.core.log.debug(message)
+	def notify(self, title, message):
+		self.debugMessage("PUSHOVER")
+	
+		data = {"token":"aroVSoXYh6hdsWvko6WSJsbJG6UVGA","user":self.key,"message":message,"title":title}
+		
+		conn = httplib.HTTPSConnection("api.pushover.net:443")
+		conn.request("POST", "/1/messages.json", urllib.urlencode(data), { "Content-type": "application/x-www-form-urlencoded" })
+		result = conn.getresponse()
+		
+		if not '{"status":1' in result.read():
+			self.hook.core.log.info('PushOver | Notification failed! Check your API-Key or your devices!')
 
 class DataMapper(object):
 	def __init__(self, hook, aStrategy):
@@ -373,7 +429,7 @@ def hdareaSearch(self, movieListTrans, packages):
 		title = title.replace("  ", " ")
 
 		searchLink = "http://www.hd-area.org/?s=search&q=" + urllib2.quote(title)
-		self.core.log.debug("search with " + searchLink)
+		##self.core.log.debug("search with " + searchLink)
 		page = openUrl(searchLink, "hd-area.org")
 
 		soup = BeautifulSoup(page)
@@ -400,12 +456,12 @@ def hdareaSearch(self, movieListTrans, packages):
 
 		# if not result.. add to do-not-forget-list
 		if len(releases) == 0:
-			self.core.log.info("added " + movie["title"] + "(" + str(movie["id"]) + ") to do-not-forget-List")
+			##self.core.log.info("added " + movie["title"] + "(" + str(movie["id"]) + ") to do-not-forget-List")
 			self.dm.doNotForget(movie["id"])
 
 		for release in releases:
 			# parse search result
-			self.core.log.debug("parse movie page " + release["link"])
+			##self.core.log.debug("parse movie page " + release["link"])
 			page = urllib2.urlopen(release["link"]).read()
 			page = openUrl(release["link"], "hd-area.org")
 			soup = BeautifulSoup(page)
@@ -442,7 +498,7 @@ def hdworldSearch(self, movieListTrans, packages):
 		title = title.replace("  ", " ")
 
 		searchLink = "http://hd-world.org/index.php?s=" + urllib2.quote(title)
-		self.core.log.debug("search with " + searchLink)
+		##self.core.log.debug("search with " + searchLink)
 		page = openUrl(searchLink, "hd-world.org")
 
 		soup = BeautifulSoup(page)
@@ -470,12 +526,12 @@ def hdworldSearch(self, movieListTrans, packages):
 
 		# if not result.. add to do-not-forget-list
 		if len(releases) == 0:
-			self.core.log.info("added " + movie["title"] + "(" + str(movie["id"]) + ") to do-not-forget-List")
+			##self.core.log.info("added " + movie["title"] + "(" + str(movie["id"]) + ") to do-not-forget-List")
 			self.dm.doNotForget(movie["id"])
 
 		for release in releases:
 			# parse search result
-			self.core.log.debug("parse movie page " + release["link"])
+			##self.core.log.debug("parse movie page " + release["link"])
 			#page = urllib2.urlopen(release["link"]).read()
 			page = openUrl(release["link"], "hd-world.org")
 			soup = BeautifulSoup(page)
@@ -490,7 +546,6 @@ def hdworldSearch(self, movieListTrans, packages):
 							for prefhoster in self.getConfig("hoster").split(";"):
 								if prefhoster.lower() in hoster.lower():
 									# accepted release link
-									self.core.log.debug("Accepted # " + url)
 									acceptedLinks.append(url)
 									# TODO: save alternative release link.
 					except Exception:
@@ -524,7 +579,7 @@ def prepareTitleList(self, movieListTrans):
 	movieListTransReduced = movieListTrans[:]
 	for movie in movieListTrans:
 		if self.dm.onFetchedList(movie["id"]):
-			self.core.log.info("TopMovieFetcher: " + movie["title"] + " was already fetched. Skip search")
+			##self.core.log.info("TopMovieFetcher: " + movie["title"] + " was already fetched. Skip search")
 			movieListTransReduced.remove(movie)
 
 	## remove duplicates
@@ -545,8 +600,8 @@ class TopMovieFetcher(Hook):
 					("activated", "bool", "Activated", "False"),
 					("queue", "bool", "move Movies directly to Queue", "False"),
 					("rssapple", "bool", "Use Apple's Top Movies RSS", "True"),
-					("rssrottentomato", "bool", "Use Rottentomatoes Top Movies RSS", "True"),
 					("rsskinode", "bool", "Use German Top Movies Charts from Kino.de RSS", "True"),
+					("rssrottentomato", "bool", "Use Rottentomatoes Top Movies RSS", "True"),
 					("usehdworld", "bool", "Search on hd-world.org", "True"),
 					("usehdarea", "bool", "Search on hd-area.org", "True"),
 					("interval", "int", "Check interval in minutes", "60"),
@@ -559,16 +614,20 @@ class TopMovieFetcher(Hook):
 					("traktvapikey", "str", "trakt.tv API-Key", ""),
 					("traktvusername", "str", "trakt.tv Username", ""),
 					("traktvpwhash", "str", "trakt.tv Password (SHA1-Hash!)", ""),
-					("traktvlist", "str", "trakt.tv List which should be fetched", "")]
+					("traktvlist", "str", "trakt.tv List which should be fetched", ""),
+					("notifymyandroidkey", "str", "NotifyMyAndroid API Key", ""),
+					("pushoverkey", "str", "Pushover API Key", "")
+				 ],
 	__author_name__ = ("Studententyp")
 	__author_mail__ = ("")
 
 	def setup(self):
 		self.interval = self.getConfig("interval") * 60 
 		self.dm = DataMapper(self, TextFile(self))
+		self.nm = NotificationMapper(self)
 
 	def periodical(self):
-
+		
 		self.core.log.info("Period of TopMovieFetcher started")
 
 		# create file
@@ -607,7 +666,9 @@ class TopMovieFetcher(Hook):
 				finalPackages.append(r)
 
 		for r in finalPackages:
-			self.core.api.addPackage(r["text"].encode("utf-8"), r["acceptedLinks"][0].split('"'), 1 if self.getConfig("queue") else 0)			
+			self.core.api.addPackage(r["text"].encode("utf-8"), r["acceptedLinks"][0].split('"'), 1 if self.getConfig("queue") else 0)
+			self.nm.notify(r["title"],r["text"] + " added to pyload's " + ("queue" if self.getConfig("queue") else "link collection"))
 			self.dm.toFetchedList(r["id"])
-
+			
 		self.core.log.info("Period of TopMovieFetcher ended")
+		
