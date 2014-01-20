@@ -36,9 +36,9 @@ def parseFeeds(self):
 	return movieList
 
 def replaceUmlauts(title):
-	title = title.replace(unichr(228), "ae").replace(unichr(196), "Ae")  # äÄ
-	title = title.replace(unichr(252), "ue").replace(unichr(220), "Ue")  # üÜ
-	title = title.replace(unichr(246), "oe").replace(unichr(214), "Oe")  # öÖ
+	title = title.replace(unichr(228), "ae").replace(unichr(196), "Ae")  # ï¿½ï¿½
+	title = title.replace(unichr(252), "ue").replace(unichr(220), "Ue")  # ï¿½ï¿½
+	title = title.replace(unichr(246), "oe").replace(unichr(214), "Oe")  # ï¿½ï¿½
 	return title
 
 def tmdbLookup(self, movieList):
@@ -599,7 +599,7 @@ def prepareTitleList(self, movieListTrans):
 
 class TopMovieFetcher(Hook):
 	__name__ = "TopMovieFetcher"
-	__version__ = "0.5"
+	__version__ = "0.5.2"
 	__description__ = "Checks HD-AREA.org for new Movies. "
 	__config__ = [
 					("activated", "bool", "Activated", "False"),
