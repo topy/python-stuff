@@ -94,16 +94,20 @@ def fetchTraktTvList(self, movieList):
 
 			if hasattr(list, "items"):
 				movies = list["items"]
+				
+				for item in movies:
+					if item["type"] == "movie":
+						movieList.append(item["movie"]["title"])
+					elif item["type"] == "show":
+						self.core.log.info("trakt.tv | tv-shows not supported!")
+				
 			else:
 				movies = list
+				for item in movies:
+					movieList.append(item["title"])
+			
 
-			for item in movies:
-				if item["type"] == "movie":
-					movieList.append(item["movie"]["title"])
-				elif item["type"] == "show":
-					self.core.log.info("trakt.tv | tv-shows not supported!")
-
-		except Exception:
+		except Exception as exc:
 			self.core.log.error("trakt.tv | can't connect to trakt.tv - or authentication failed")
 
 	return movieList
@@ -474,7 +478,7 @@ def hdareaSearch(self, movieListTrans, packages):
 						url = link.a["href"]
 						hoster = link.text
 						for prefhoster in self.getConfig("hoster").split(";"):
-							if prefhoster.lower().strip() in hoster.lower():
+							if prefhoster.lower() in hoster.lower():
 								# accepted release link
 								acceptedLinks.append(url)
 								# TODO: save alternative release link.
@@ -533,6 +537,7 @@ def hdworldSearch(self, movieListTrans, packages):
 		for release in releases:
 			# parse search result
 			##self.core.log.debug("parse movie page " + release["link"])
+			#page = urllib2.urlopen(release["link"]).read()
 			page = openUrl(release["link"], "hd-world.org")
 			soup = BeautifulSoup(page)
 			acceptedLinks = []
@@ -544,7 +549,7 @@ def hdworldSearch(self, movieListTrans, packages):
 						psText = link.previousSibling.text.lower()
 						if "download" in psText or "mirror" in psText:
 							for prefhoster in self.getConfig("hoster").split(";"):
-								if prefhoster.lower().strip() in hoster.lower():
+								if prefhoster.lower() in hoster.lower():
 									# accepted release link
 									acceptedLinks.append(url)
 									# TODO: save alternative release link.
