@@ -599,7 +599,7 @@ def prepareTitleList(self, movieListTrans):
 
 class TopMovieFetcher(Hook):
 	__name__ = "TopMovieFetcher"
-	__version__ = "0.5.2"
+	__version__ = "0.6"
 	__description__ = "Checks HD-AREA.org for new Movies. "
 	__config__ = [
 					("activated", "bool", "Activated", "False"),
