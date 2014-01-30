@@ -349,7 +349,7 @@ class TextFile(PersistentStrategy):
 			content["doNotForgetCache"] = []
 			
 		if not tmdbid in content["doNotForgetCache"]:
-			self.logInfo("added " + tmdbid + " to NotForgetList")
+			self.hook.logInfo("added " + tmdbid + " to NotForgetList")
 			content["doNotForgetCache"].append(tmdbid)
 			
 		self.writeFile(content)
