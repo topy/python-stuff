@@ -624,12 +624,6 @@ class TopMovieFetcher(Hook):
 				 ],
 	__author_name__ = ("Studententyp")
 	__author_mail__ = ("")
-	
-	def downloadFailed(self, pyfile):
-		##self.logInfo('downloadFailed!')
-		
-	def packageFinished(self, pypack):
-		##self.logInfo('packageFinished!')
 
 	def setup(self):
 		self.interval = self.getConfig("interval") * 60 
