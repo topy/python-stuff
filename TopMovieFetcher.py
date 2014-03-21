@@ -38,6 +38,7 @@ def replaceUmlauts(title):
 	title = title.replace(unichr(228), "ae").replace(unichr(196), "Ae")  # ��
 	title = title.replace(unichr(252), "ue").replace(unichr(220), "Ue")  # ��
 	title = title.replace(unichr(246), "oe").replace(unichr(214), "Oe")  # ��
+	title = title.replace(unichr(223), "ss") # replaces 'scharfes S'
 	return title
 
 def tmdbLookup(self, movieList):
